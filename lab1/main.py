@@ -132,8 +132,8 @@ def gen_stress_test(n: int = 10**5, m: int = 10**4, max_word_len: int = 20) -> T
 
         trie = Trie()
 
-        # Заполнение словаря с прогресс-баром
-        print("")  # Пустая строка для разделения
+        # Заполнение словаря
+        print()
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -1641,205 +1641,203 @@ def main() -> None:
                     "→ "
                 )
 
-                if mode == "/help":
-                    show_help()
-                    continue
-
-                if mode in ["1", "2", "3"]:
-                    break
-                else:
-                    print("[red]Введите 1, 2, 3 или /help[/red]")
-
             except KeyboardInterrupt:
                 print("\n[yellow]Программа завершена[/yellow]")
                 return
 
-        if mode == "3":
-            # Режим тестирования
-            console.print(
-                "[bold yellow]🧪 Запуск тестирования...[/bold yellow]")
+            if mode not in ["1", "2", "3"]:
+                print("[red]Введите 1, 2, 3 или /help[/red]")
+                continue
 
-            runner = TestRunner()
+            elif mode == "/help":
+                show_help()
+                continue
 
-            # Получаем все тесты
-            tests = get_all_tests()
-
-            console.print(f"[cyan]Найдено тестов: {len(tests)}[/cyan]")
-            console.print(
-                f"[cyan]Интерактивных сценариев: {len(INTERACTIVE_TEST_SCENARIOS)}[/cyan]")
-
-            # Запускаем автоматические тесты
-            runner.run_all_tests(tests)
-            runner.print_detailed_results()
-            runner.print_summary()
-
-            # Запускаем интерактивные сценарии
-            console.print(
-                "\n[bold yellow]🎭 Тестирование интерактивных сценариев[/bold yellow]")
-            console.print("[dim]Это может занять некоторое время...[/dim]")
-            runner.run_interactive_scenarios()
-
-        elif mode == "2":
-            # Режим стресс-теста
-            try:
-                s, trie = gen_stress_test()
-
-                show = safe_input("Показать статистику? (д/н): ").lower()
-                if show in ['д', 'да', 'y', 'yes']:
-                    console.print(f"\n[cyan]Статистика:[/cyan]")
-                    console.print(f"  Длина строки: {len(s)}")
-                    console.print(f"  Слов в словаре: {trie.word_count}")
-                    console.print(f"  Макс. длина слова: {trie.max_len}")
-
-                print("\n[bold]Запуск алгоритма...[/bold]")
-                start = time.time()
-                total, seg = segment_text(s, trie)
-                elapsed = time.time() - start
-
-                if total is None:
-                    print("[red]Разбиение невозможно[/red]")
-                else:
-                    print(f"[green]Максимальная сумма: {total:.2f}[/green]")
-                    if len(seg) <= 10:
-                        print("Разбиение:", " + ".join(seg))
-                    else:
-                        print(f"Разбиение содержит {len(seg)} слов")
-
-                print(f"⏱ Время: {elapsed:.3f} сек")
-
-            except Exception as e:
-                print(f"[red]Ошибка: {e}[/red]")
-
-        else:
-            # Обычный режим
-            try:
-                trie = Trie()
-                s = read_string(interactive=True)
-                console.print("[green]✓ Строка принята[/green]\n")
-                read_dictionary(trie, interactive=True)
-                console.print(f"[green]✓ Словарь загружен[/green]\n")
-
-                show = safe_input("Показать бор? (д/н): ").lower()
-                if show in ['д', 'да', 'y', 'yes']:
-                    trie.visualize()
-
-                print("\n[bold]Запуск алгоритма...[/bold]")
+            elif mode == "3":
+                # Режим тестирования
                 console.print(
-                    "[bold]🚀 Запуск алгоритма динамического программирования...[/bold]")
+                    "[bold yellow]🧪 Запуск тестирования...[/bold yellow]")
 
-                # Прогресс-бар для алгоритма (для длинных строк)
-                if len(s) > 10000:
-                    with Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        TextColumn(
-                            "[progress.percentage]{task.percentage:>3.0f}%"),
-                        TimeElapsedColumn(),
-                        console=console
-                    ) as progress:
-                        task = progress.add_task(
-                            "[cyan]Обработка строки...", total=len(s))
+                runner = TestRunner()
 
-                        start = time.time()
+                # Получаем все тесты
+                tests = get_all_tests()
 
-                        # Модифицируем алгоритм для обновления прогресса
-                        n = len(s)
-                        dp = [-float('inf')] * (n + 1)
-                        prev = [-1] * (n + 1)
-                        chosen_weight = [0.0] * (n + 1)
-                        dp[0] = 0
+                console.print(f"[cyan]Найдено тестов: {len(tests)}[/cyan]")
+                console.print(
+                    f"[cyan]Интерактивных сценариев: {len(INTERACTIVE_TEST_SCENARIOS)}[/cyan]")
 
-                        for i in range(n):
-                            if dp[i] == -float('inf'):
-                                progress.update(task, advance=1)
-                                continue
+                # Запускаем автоматические тесты
+                runner.run_all_tests(tests)
+                runner.print_detailed_results()
+                runner.print_summary()
 
-                            node = trie.root
-                            for j in range(i, min(n, i + trie.max_len)):
-                                idx = ord(s[j]) - ord('a')
-                                if node.children[idx] is None:
-                                    break
-                                node = node.children[idx]
-                                if node.best_weight is not None:
-                                    new_value = dp[i] + node.best_weight
-                                    if new_value > dp[j + 1]:
-                                        dp[j + 1] = new_value
-                                        prev[j + 1] = i
-                                        chosen_weight[j + 1] = node.best_weight
+                # Запускаем интерактивные сценарии
+                console.print(
+                    "\n[bold yellow]🎭 Тестирование интерактивных сценариев[/bold yellow]")
+                console.print("[dim]Это может занять некоторое время...[/dim]")
+                runner.run_interactive_scenarios()
 
-                            progress.update(task, advance=1)
+            elif mode == "2":
+                # Режим стресс-теста
+                try:
+                    s, trie = gen_stress_test()
 
-                        elapsed = time.time() - start
+                    show = safe_input("Показать статистику? (д/н): ").lower()
+                    if show in ['д', 'да', 'y', 'yes']:
+                        console.print(f"\n[cyan]Статистика:[/cyan]")
+                        console.print(f"  Длина строки: {len(s)}")
+                        console.print(f"  Слов в словаре: {trie.word_count}")
+                        console.print(f"  Макс. длина слова: {trie.max_len}")
 
-                        if dp[n] == -float('inf'):
-                            total = None
-                            seg = None
+                    print("\n[bold]Запуск алгоритма...[/bold]")
+                    start = time.time()
+                    total, seg = segment_text(s, trie)
+                    elapsed = time.time() - start
+
+                    if total is None:
+                        print("[red]Разбиение невозможно[/red]")
+                    else:
+                        print(f"[green]Максимальная сумма: {total:.2f}[/green]")
+                        if len(seg) <= 10:
+                            print("Разбиение:", " + ".join(seg))
                         else:
-                            total = dp[n]
-                            seg = []
-                            idx = n
-                            while idx > 0:
-                                start_idx = prev[idx]
-                                seg.append(
-                                    f"{s[start_idx:idx]}({chosen_weight[idx]:.2f})")
-                                idx = start_idx
-                            seg.reverse()
-                else:
-                    # Обычный запуск для коротких строк
-                    with console.status("[bold cyan]Вычисление оптимального разбиения...[/bold cyan]", spinner="dots"):
-                        start = time.time()
-                        total, seg = segment_text(s, trie)
-                        elapsed = time.time() - start
+                            print(f"Разбиение содержит {len(seg)} слов")
 
-                print("\n[bold green]Результат:[/bold green]")
-                if total is None:
-                    result_panel = Panel(
-                        "[red]❌ Разбиение невозможно[/red]\n\n[dim]-1[/dim]",
-                        title="[bold red]Результат[/bold red]",
-                        border_style="red",
-                        padding=(1, 2)
-                    )
-                    console.print(result_panel)
-                else:
-                    # Создаем таблицу с разбиением
-                    seg_table = Table(show_header=False,
-                                      box=box.SIMPLE, padding=(0, 1))
-                    seg_table.add_column("№", style="dim", width=3)
-                    seg_table.add_column("Слово(вес)", style="green")
+                    print(f"⏱ Время: {elapsed:.3f} сек")
 
-                    for i, word in enumerate(seg, 1):
-                        seg_table.add_row(str(i), word)
+                except Exception as e:
+                    print(f"[red]Ошибка: {e}[/red]")
 
-                    # Информация о времени и сложности
-                    info_panel = Panel(
-                        f"[cyan]⏱ Время:[/cyan] [bold]{elapsed:.6f}[/bold] сек\n"
-                        f"[cyan]📊 Сложность:[/cyan] [bold]O({len(s)} * {trie.max_len})[/bold]\n"
-                        f"[cyan]📦 Слов в словаре:[/cyan] [bold]{trie.word_count}[/bold]",
-                        title="[bold]Информация[/bold]",
-                        border_style="cyan",
-                        padding=(1, 2)
-                    )
+            else:
+                # Обычный режим
+                try:
+                    trie = Trie()
+                    s = read_string(interactive=True)
+                    console.print("[green]✓ Строка принята[/green]\n")
+                    read_dictionary(trie, interactive=True)
+                    console.print(f"[green]✓ Словарь загружен[/green]\n")
 
-                    # Основной результат
+                    show = safe_input("Показать бор? (д/н): ").lower()
+                    if show in ['д', 'да', 'y', 'yes']:
+                        trie.visualize()
+
+                    print("\n[bold]Запуск алгоритма...[/bold]")
                     console.print(
-                        f"[bold green]✅ Максимальная сумма:[/bold green] [bold yellow]{total:.2f}[/bold yellow]")
-                    console.print()
-                    console.print(
-                        f"[bold]📝 Разбиение ({len(seg)} слов):[/bold]")
-                    console.print(seg_table)
-                    console.print(info_panel)
+                        "[bold]🚀 Запуск алгоритма динамического программирования...[/bold]")
 
-                    # Дополнительная информация для длинных разбиений
-                    if len(seg) > 20:
+                    # Прогресс-бар для алгоритма (для длинных строк)
+                    if len(s) > 10000:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[progress.description]{task.description}"),
+                            BarColumn(),
+                            TextColumn(
+                                "[progress.percentage]{task.percentage:>3.0f}%"),
+                            TimeElapsedColumn(),
+                            console=console
+                        ) as progress:
+                            task = progress.add_task(
+                                "[cyan]Обработка строки...", total=len(s))
+
+                            start = time.time()
+
+                            # Модифицируем алгоритм для обновления прогресса
+                            n = len(s)
+                            dp = [-float('inf')] * (n + 1)
+                            prev = [-1] * (n + 1)
+                            chosen_weight = [0.0] * (n + 1)
+                            dp[0] = 0
+
+                            for i in range(n):
+                                if dp[i] == -float('inf'):
+                                    progress.update(task, advance=1)
+                                    continue
+
+                                node = trie.root
+                                for j in range(i, min(n, i + trie.max_len)):
+                                    idx = ord(s[j]) - ord('a')
+                                    if node.children[idx] is None:
+                                        break
+                                    node = node.children[idx]
+                                    if node.best_weight is not None:
+                                        new_value = dp[i] + node.best_weight
+                                        if new_value > dp[j + 1]:
+                                            dp[j + 1] = new_value
+                                            prev[j + 1] = i
+                                            chosen_weight[j + 1] = node.best_weight
+
+                                progress.update(task, advance=1)
+
+                            elapsed = time.time() - start
+
+                            if dp[n] == -float('inf'):
+                                total = None
+                                seg = None
+                            else:
+                                total = dp[n]
+                                seg = []
+                                idx = n
+                                while idx > 0:
+                                    start_idx = prev[idx]
+                                    seg.append(
+                                        f"{s[start_idx:idx]}({chosen_weight[idx]:.2f})")
+                                    idx = start_idx
+                                seg.reverse()
+                    else:
+                        # Обычный запуск для коротких строк
+                        with console.status("[bold cyan]Вычисление оптимального разбиения...[/bold cyan]", spinner="dots"):
+                            start = time.time()
+                            total, seg = segment_text(s, trie)
+                            elapsed = time.time() - start
+
+                    if total is None:
+                        result_panel = Panel(
+                            "[red]❌ Разбиение невозможно[/red]\n\n[dim]-1[/dim]",
+                            title="[bold red]Результат[/bold red]",
+                            border_style="red",
+                            padding=(1, 2)
+                        )
+                        console.print(result_panel)
+                    else:
+                        # Создаем таблицу с разбиением
+                        seg_table = Table(show_header=False,
+                                        box=box.SIMPLE, padding=(0, 1))
+                        seg_table.add_column("№", style="dim", width=3)
+                        seg_table.add_column("Слово(вес)", style="green")
+
+                        for i, word in enumerate(seg, 1):
+                            seg_table.add_row(str(i), word)
+
+                        # Информация о времени и сложности
+                        info_panel = Panel(
+                            f"[cyan]⏱ Время:[/cyan] [bold]{elapsed:.6f}[/bold] сек\n"
+                            f"[cyan]📊 Сложность:[/cyan] [bold]O({len(s)} * {trie.max_len})[/bold]\n"
+                            f"[cyan]📦 Слов в словаре:[/cyan] [bold]{trie.word_count}[/bold]",
+                            title="[bold]Информация[/bold]",
+                            border_style="cyan",
+                            padding=(1, 2)
+                        )
+
+                        # Основной результат
                         console.print(
-                            f"\n[dim]Показано {len(seg)} слов. Всего слов в разбиении: {len(seg)}[/dim]")
+                            f"[bold green]✅ Максимальная сумма:[/bold green] [bold yellow]{total:.2f}[/bold yellow]")
+                        console.print()
+                        console.print(
+                            f"[bold]📝 Разбиение ({len(seg)} слов):[/bold]")
+                        console.print(seg_table)
+                        console.print(info_panel)
 
-            except KeyboardInterrupt:
-                print("\n[yellow]Операция прервана[/yellow]")
-            except Exception as e:
-                print(f"[red]Ошибка: {e}[/red]")
-                console.print(f"[red]Ошибка: {e}[/red]")
+                        # Дополнительная информация для длинных разбиений
+                        if len(seg) > 20:
+                            console.print(
+                                f"\n[dim]Показано {len(seg)} слов. Всего слов в разбиении: {len(seg)}[/dim]")
+
+                except KeyboardInterrupt:
+                    print("\n[yellow]Операция прервана[/yellow]")
+                except Exception as e:
+                    print(f"[red]Ошибка: {e}[/red]")
+                    console.print(f"[red]Ошибка: {e}[/red]")
     except KeyboardInterrupt:
         print("\n[yellow]Программа завершена[/yellow]")
     except Exception as e:
