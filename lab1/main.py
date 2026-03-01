@@ -30,7 +30,7 @@ from rich.tree import Tree
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
 from rich.layout import Layout
 from rich.live import Live
 from rich.text import Text
@@ -102,37 +102,68 @@ def gen_stress_test(n: int = 10**5, m: int = 10**4, max_word_len: int = 20) -> T
         # Проверка входных параметров
         if n <= 0 or m <= 0 or max_word_len <= 0:
             raise ValueError("Параметры должны быть положительными числами")
-        if n > 10**6:
+        if n > 10**5:
             raise ValueError("Слишком большая длина строки")
         if m > 10**5:
             raise ValueError("Слишком много слов в словаре")
 
-        try:
-            # Генерация строки случайных строчных букв длиной n
-            s = ''.join(random.choices(string.ascii_lowercase, k=n))
-        except MemoryError:
-            raise MemoryError("Недостаточно памяти для генерации строки")
+        # Генерация строки с прогресс-баром
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task("[cyan]Генерация строки...", total=n)
+
+            try:
+                # Генерация строки случайных строчных букв длиной n
+                chars = []
+                for i in range(n):
+                    chars.append(random.choice(string.ascii_lowercase))
+                    if i % 1000 == 0:  # Обновляем прогресс каждые 1000 символов
+                        progress.update(task, completed=i)
+                s = ''.join(chars)
+                progress.update(task, completed=n)
+            except MemoryError:
+                raise MemoryError("Недостаточно памяти для генерации строки")
 
         trie = Trie()
 
-        # Заполнение словаря случайными словами со случайными весами
-        successful_inserts = 0
-        for i in range(m):
-            try:
-                length: int = random.randint(1, max_word_len)
-                word: str = ''.join(random.choices(
-                    string.ascii_lowercase, k=length))
-                weight: float = random.uniform(
-                    1, 100)  # случайный вес от 1 до 100
-                trie.insert(word, weight)
-                successful_inserts += 1
-            except Exception as e:
-                print(
-                    f"[yellow]Предупреждение: не удалось вставить слово {i+1}: {e}[/yellow]")
-                continue
+        # Заполнение словаря с прогресс-баром
+        print("")  # Пустая строка для разделения
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            console=console
+        ) as progress:
+            task = progress.add_task("[yellow]Генерация словаря...", total=m)
+
+            successful_inserts = 0
+            for i in range(m):
+                try:
+                    length: int = random.randint(1, max_word_len)
+                    word: str = ''.join(random.choices(
+                        string.ascii_lowercase, k=length))
+                    weight: float = random.uniform(
+                        1, 100)  # случайный вес от 1 до 100
+                    trie.insert(word, weight)
+                    successful_inserts += 1
+                except Exception as e:
+                    print(
+                        f"\n[yellow]Предупреждение: не удалось вставить слово {i+1}: {e}[/yellow]")
+                    continue
+                finally:
+                    progress.update(task, advance=1)
 
         print(
-            f"Сгенерировано: n={n}, m={successful_inserts}/{m}, L_max={trie.max_len}")
+            f"\n[green]Сгенерировано:[/green] n={n}, m={successful_inserts}/{m}, L_max={trie.max_len}")
         return s, trie
 
     except ValueError as e:
@@ -645,60 +676,137 @@ def read_dictionary(trie: Trie, interactive: bool = True) -> None:
             print("Введите записи в формате: слово вес")
 
         successful_inserts = 0
-        for i in range(m):
-            entry_attempts = 0
-            while entry_attempts < max_attempts:
-                try:
-                    if interactive:
-                        line: str = safe_input(f"Запись {i+1}: ")
-                    else:
-                        line: str = input().strip()
 
-                    if not line:
+        # Прогресс-бар для вставки слов
+        if interactive and m > 10:  # Показываем прогресс-бар только если записей много
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                console=console
+            ) as progress:
+                task = progress.add_task(
+                    "[yellow]Вставка слов в словарь...", total=m)
+
+                for i in range(m):
+                    entry_attempts = 0
+                    while entry_attempts < max_attempts:
+                        try:
+                            if interactive:
+                                line: str = safe_input(f"Запись {i+1}: ")
+                            else:
+                                line: str = input().strip()
+
+                            if not line:
+                                if interactive:
+                                    print(
+                                        "[red]Строка не может быть пустой[/red]")
+                                entry_attempts += 1
+                                continue
+
+                            parts = line.split()
+
+                            if len(parts) != 2:
+                                if interactive:
+                                    print("[red]Формат: слово вес[/red]")
+                                entry_attempts += 1
+                                continue
+
+                            word, weight_str = parts
+
+                            if not word.isalpha() or not word.islower():
+                                if interactive:
+                                    print(
+                                        "[red]Только строчные латинские буквы[/red]")
+                                entry_attempts += 1
+                                continue
+
+                            try:
+                                weight: float = float(weight_str)
+                            except ValueError:
+                                if interactive:
+                                    print("[red]Вес должен быть числом[/red]")
+                                entry_attempts += 1
+                                continue
+
+                            trie.insert(word, weight)
+                            successful_inserts += 1
+                            progress.update(task, advance=1)
+                            break
+
+                        except KeyboardInterrupt:
+                            raise
+                        except Exception as e:
+                            if interactive:
+                                print(
+                                    f"[red]Ошибка при обработке записи: {e}[/red]")
+                            entry_attempts += 1
+
+                    if entry_attempts >= max_attempts:
                         if interactive:
-                            print("[red]Строка не может быть пустой[/red]")
-                        entry_attempts += 1
-                        continue
-
-                    parts = line.split()
-
-                    if len(parts) != 2:
-                        if interactive:
-                            print("[red]Формат: слово вес[/red]")
-                        entry_attempts += 1
-                        continue
-
-                    word, weight_str = parts
-
-                    if not word.isalpha() or not word.islower():
-                        if interactive:
-                            print("[red]Только строчные латинские буквы[/red]")
-                        entry_attempts += 1
-                        continue
-
+                            print(
+                                f"[yellow]Пропуск записи {i+1} после {max_attempts} попыток[/yellow]")
+                        progress.update(task, advance=1)
+        else:
+            # Обычный ввод без прогресс-бара для небольшого количества записей
+            for i in range(m):
+                entry_attempts = 0
+                while entry_attempts < max_attempts:
                     try:
-                        weight: float = float(weight_str)
-                    except ValueError:
                         if interactive:
-                            print("[red]Вес должен быть числом[/red]")
+                            line: str = safe_input(f"Запись {i+1}: ")
+                        else:
+                            line: str = input().strip()
+
+                        if not line:
+                            if interactive:
+                                print("[red]Строка не может быть пустой[/red]")
+                            entry_attempts += 1
+                            continue
+
+                        parts = line.split()
+
+                        if len(parts) != 2:
+                            if interactive:
+                                print("[red]Формат: слово вес[/red]")
+                            entry_attempts += 1
+                            continue
+
+                        word, weight_str = parts
+
+                        if not word.isalpha() or not word.islower():
+                            if interactive:
+                                print(
+                                    "[red]Только строчные латинские буквы[/red]")
+                            entry_attempts += 1
+                            continue
+
+                        try:
+                            weight: float = float(weight_str)
+                        except ValueError:
+                            if interactive:
+                                print("[red]Вес должен быть числом[/red]")
+                            entry_attempts += 1
+                            continue
+
+                        trie.insert(word, weight)
+                        successful_inserts += 1
+                        break
+
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception as e:
+                        if interactive:
+                            print(
+                                f"[red]Ошибка при обработке записи: {e}[/red]")
                         entry_attempts += 1
-                        continue
 
-                    trie.insert(word, weight)
-                    successful_inserts += 1
-                    break
-
-                except KeyboardInterrupt:
-                    raise
-                except Exception as e:
+                if entry_attempts >= max_attempts:
                     if interactive:
-                        print(f"[red]Ошибка при обработке записи: {e}[/red]")
-                    entry_attempts += 1
-
-            if entry_attempts >= max_attempts:
-                if interactive:
-                    print(
-                        f"[yellow]Пропуск записи {i+1} после {max_attempts} попыток[/yellow]")
+                        print(
+                            f"[yellow]Пропуск записи {i+1} после {max_attempts} попыток[/yellow]")
 
         if interactive:
             print(
@@ -1112,6 +1220,8 @@ class TestRunner:
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
             console=console
         ) as progress:
 
@@ -1163,6 +1273,8 @@ class TestRunner:
             console.print("─" * 80)
 
             for result in type_tests:
+                if result["status"] != "failed":
+                    continue
                 status_icon = "✅" if result["status"] == "passed" else "❌"
                 status_color = "green" if result["status"] == "passed" else "red"
 
@@ -1513,6 +1625,7 @@ def main() -> None:
     ...     main()  # запуск программы
     """
     try:
+        console = Console()
         print("\n[bold cyan]╔════════════════════════════════════╗[/bold cyan]")
         print("[bold cyan]║    Сегментация текста (Омонимия)   ║[/bold cyan]")
         print("[bold cyan]╚════════════════════════════════════╝[/bold cyan]\n")
@@ -1602,37 +1715,131 @@ def main() -> None:
             try:
                 trie = Trie()
                 s = read_string(interactive=True)
-                print()
+                console.print("[green]✓ Строка принята[/green]\n")
                 read_dictionary(trie, interactive=True)
-                print()
+                console.print(f"[green]✓ Словарь загружен[/green]\n")
 
                 show = safe_input("Показать бор? (д/н): ").lower()
                 if show in ['д', 'да', 'y', 'yes']:
                     trie.visualize()
 
                 print("\n[bold]Запуск алгоритма...[/bold]")
-                start = time.time()
-                total, seg = segment_text(s, trie)
-                elapsed = time.time() - start
+                console.print(
+                    "[bold]🚀 Запуск алгоритма динамического программирования...[/bold]")
+
+                # Прогресс-бар для алгоритма (для длинных строк)
+                if len(s) > 10000:
+                    with Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TextColumn(
+                            "[progress.percentage]{task.percentage:>3.0f}%"),
+                        TimeElapsedColumn(),
+                        console=console
+                    ) as progress:
+                        task = progress.add_task(
+                            "[cyan]Обработка строки...", total=len(s))
+
+                        start = time.time()
+
+                        # Модифицируем алгоритм для обновления прогресса
+                        n = len(s)
+                        dp = [-float('inf')] * (n + 1)
+                        prev = [-1] * (n + 1)
+                        chosen_weight = [0.0] * (n + 1)
+                        dp[0] = 0
+
+                        for i in range(n):
+                            if dp[i] == -float('inf'):
+                                progress.update(task, advance=1)
+                                continue
+
+                            node = trie.root
+                            for j in range(i, min(n, i + trie.max_len)):
+                                idx = ord(s[j]) - ord('a')
+                                if node.children[idx] is None:
+                                    break
+                                node = node.children[idx]
+                                if node.best_weight is not None:
+                                    new_value = dp[i] + node.best_weight
+                                    if new_value > dp[j + 1]:
+                                        dp[j + 1] = new_value
+                                        prev[j + 1] = i
+                                        chosen_weight[j + 1] = node.best_weight
+
+                            progress.update(task, advance=1)
+
+                        elapsed = time.time() - start
+
+                        if dp[n] == -float('inf'):
+                            total = None
+                            seg = None
+                        else:
+                            total = dp[n]
+                            seg = []
+                            idx = n
+                            while idx > 0:
+                                start_idx = prev[idx]
+                                seg.append(
+                                    f"{s[start_idx:idx]}({chosen_weight[idx]:.2f})")
+                                idx = start_idx
+                            seg.reverse()
+                else:
+                    # Обычный запуск для коротких строк
+                    with console.status("[bold cyan]Вычисление оптимального разбиения...[/bold cyan]", spinner="dots"):
+                        start = time.time()
+                        total, seg = segment_text(s, trie)
+                        elapsed = time.time() - start
 
                 print("\n[bold green]Результат:[/bold green]")
                 if total is None:
-                    print("[red]❌ Разбиение невозможно[/red]")
-                    print("-1")
+                    result_panel = Panel(
+                        "[red]❌ Разбиение невозможно[/red]\n\n[dim]-1[/dim]",
+                        title="[bold red]Результат[/bold red]",
+                        border_style="red",
+                        padding=(1, 2)
+                    )
+                    console.print(result_panel)
                 else:
-                    print(
-                        f"✅ Максимальная сумма: [bold yellow]{total:.2f}[/bold yellow]")
-                    print("📝 Разбиение:")
-                    print(" + ".join(seg))
+                    # Создаем таблицу с разбиением
+                    seg_table = Table(show_header=False,
+                                      box=box.SIMPLE, padding=(0, 1))
+                    seg_table.add_column("№", style="dim", width=3)
+                    seg_table.add_column("Слово(вес)", style="green")
 
-                print(f"\n⏱ Время: {elapsed:.3f} сек")
-                print(f"📊 Сложность: O({len(s)} * {trie.max_len})")
+                    for i, word in enumerate(seg, 1):
+                        seg_table.add_row(str(i), word)
+
+                    # Информация о времени и сложности
+                    info_panel = Panel(
+                        f"[cyan]⏱ Время:[/cyan] [bold]{elapsed:.6f}[/bold] сек\n"
+                        f"[cyan]📊 Сложность:[/cyan] [bold]O({len(s)} * {trie.max_len})[/bold]\n"
+                        f"[cyan]📦 Слов в словаре:[/cyan] [bold]{trie.word_count}[/bold]",
+                        title="[bold]Информация[/bold]",
+                        border_style="cyan",
+                        padding=(1, 2)
+                    )
+
+                    # Основной результат
+                    console.print(
+                        f"[bold green]✅ Максимальная сумма:[/bold green] [bold yellow]{total:.2f}[/bold yellow]")
+                    console.print()
+                    console.print(
+                        f"[bold]📝 Разбиение ({len(seg)} слов):[/bold]")
+                    console.print(seg_table)
+                    console.print(info_panel)
+
+                    # Дополнительная информация для длинных разбиений
+                    if len(seg) > 20:
+                        console.print(
+                            f"\n[dim]Показано {len(seg)} слов. Всего слов в разбиении: {len(seg)}[/dim]")
 
             except KeyboardInterrupt:
                 print("\n[yellow]Операция прервана[/yellow]")
             except Exception as e:
                 print(f"[red]Ошибка: {e}[/red]")
-
+                console.print(f"[red]Ошибка: {e}[/red]")
     except KeyboardInterrupt:
         print("\n[yellow]Программа завершена[/yellow]")
     except Exception as e:
