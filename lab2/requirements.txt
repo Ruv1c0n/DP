@@ -1,0 +1,14 @@
+# Основные зависимости
+rich>=13.0.0
+
+# Для визуализации графов (опционально)
+networkx>=3.0
+matplotlib>=3.5.0
+
+# Tkinter обычно встроен в Python, но для явного указания (Linux):
+# python3-tk (для Ubuntu/Debian)
+# tkinter (встроен в Windows/macOS)
+
+# Для тестирования (обычно встроены)
+unittest
+unittest.mock
