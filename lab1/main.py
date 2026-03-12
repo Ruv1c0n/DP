@@ -1645,7 +1645,7 @@ def main() -> None:
                 print("\n[yellow]Программа завершена[/yellow]")
                 return
 
-            if mode not in ["1", "2", "3"]:
+            if mode not in ["1", "2", "3", "/help"]:
                 print("[red]Введите 1, 2, 3 или /help[/red]")
                 continue
 
